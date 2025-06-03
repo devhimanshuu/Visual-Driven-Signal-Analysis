@@ -1,6 +1,7 @@
 flask==2.0.1
 opencv-python==4.5.3.56
-numpy==1.21.2
+streamlit
+numpy>=1.21,<1.26
 pyttsx3==2.90
 transformers==4.40.1
 torch==2.2.2+cpu
