@@ -1,0 +1,45 @@
+Project Organization
+The code is now organized into a clear directory structure:
+
+app.py - Main entry point that runs the Flask web server
+src/ directory - Contains the core application logic
+static/ directory - Contains CSS and JavaScript for the web interface
+templates/ directory - Contains the HTML template
+
+Key Components
+
+Core Components:
+
+morse_converter.py: Handles Morse code conversion logic
+blink_detector.py: Handles eye detection and blink processing
+tts_engine.py: Manages text-to-speech functionality
+
+
+User Interface:
+
+Split view UI with camera feed on the left and information on the right
+Responsive design with CSS for better user experience
+JavaScript that updates decoded text and camera status automatically
+
+
+Improvements:
+
+Better separation of concerns (UI vs. core logic)
+More maintainable code structure
+Added a reset button to clear decoded text
+Added camera status indicator
+Improved error handling
+
+
+
+How to Run
+
+Install the dependencies:
+pip install -r requirements.txt
+
+Run the application:
+python app.py
+
+Open your web browser and navigate to http://localhost:8081
+
+The application functionality remains the same as the original, but with a cleaner architecture that makes it easier to maintain and extend in the future.

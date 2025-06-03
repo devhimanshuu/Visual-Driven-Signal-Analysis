@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morse Code Blink Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .camera-view {
+            flex: 1;
+            background: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+        }
+        
+        .info-panel {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: white;
+        }
+        
+        .panel-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        h1, h2 {
+            color: #333;
+        }
+        
+        #decoded-text {
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background: white;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        
+        .timing-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .timing-control {
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button#stop-process {
+            background-color: #f44336;
+        }
+        
+        button#stop-process:hover {
+            background-color: #d32f2f;
+        }
+        
+        button#show-references {
+            background-color: #2196F3;
+        }
+        
+        button#show-references:hover {
+            background-color: #0b7dda;
+        }
+        
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 5px 10px;
+            border-radius: 3px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .status-active {
+            background-color: #4CAF50;
+        }
+        
+        .status-inactive {
+            background-color: #f44336;
+        }
+
+        /* Word Prediction Styles */
+        #predicted-word-container {
+            margin-top: 10px;
+        }
+
+        #predicted-word {
+            padding: 10px;
+            background-color: #e8f5e9;
+            border: 1px solid #a5d6a7;
+            border-radius: 4px;
+            font-size: 1.2em;
+            min-height: 30px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        #predicted-word.highlight {
+            background-color: #c8e6c9;
+            font-weight: bold;
+        }
+
+        #predicted-word:hover {
+            background-color: #dcedc8;
+        }
+
+        /* Suggestions Styles */
+        .suggestions-list {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .suggestion {
+            padding: 5px 10px;
+            background-color: #e0e0e0;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .suggestion:hover {
+            background-color: #d0d0d0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="camera-view">
+            <div id="status-indicator" class="status-indicator status-inactive">INACTIVE</div>
+            <img src="{{ url_for('video_feed') }}" alt="Camera Feed">
+        </div>
+        <div class="info-panel">
+            <h1>Morse Code Blink Converter</h1>
+            
+            <div class="panel-section">
+                <h2>Control Panel</h2>
+                <button id="start-process">Start Detection</button>
+                <button id="stop-process">Stop Detection</button>
+                <button id="show-references">Show Morse References</button>
+                <button id="reset-text">Reset Text</button>
+            </div>
+            
+            <div class="panel-section">
+                <h2>Instructions</h2>
+                <ul>
+                    <li><strong>Short blink</strong> (&lt; {{ dot_max }}s) = Dot (.)</li>
+                    <li><strong>Long blink</strong> ({{ dash_min }}-{{ dash_max }}s) = Dash (-)</li>
+                    <li><strong>Pause {{ char_pause }}s</strong> = Complete character</li>
+                    <li><strong>Pause {{ word_pause }}s</strong> = Complete word (space)</li>
+                </ul>
+            </div>
+
+            <div class="panel-section">
+                <h2>Word Prediction</h2>
+                <div id="predicted-word-container">
+                    <div id="predicted-word" class="predicted-word"></div>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h2>Text Suggestions</h2>
+                <div id="suggestions-container">
+                    <div class="suggestions-list" id="suggestions-list"></div>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h2>Timing Controls</h2>
+                <div class="timing-controls">
+                    <div class="timing-control">
+                        <label for="dot_max">Dot Max (s):</label>
+                        <input type="number" id="dot_max" step="0.1" min="0.1" max="1" value="{{ dot_max }}">
+                    </div>
+                    <div class="timing-control">
+                        <label for="dash_min">Dash Min (s):</label>
+                        <input type="number" id="dash_min" step="0.1" min="0.1" max="5" value="{{ dash_min }}">
+                    </div>
+                    <div class="timing-control">
+                        <label for="dash_max">Dash Max (s):</label>
+                        <input type="number" id="dash_max" step="0.1" min="0.1" max="5" value="{{ dash_max }}">
+                    </div>
+                    <div class="timing-control">
+                        <label for="char_pause">Char Pause (s):</label>
+                        <input type="number" id="char_pause" step="0.1" min="0.5" max="10" value="{{ char_pause }}">
+                    </div>
+                    <div class="timing-control">
+                        <label for="word_pause">Word Pause (s):</label>
+                        <input type="number" id="word_pause" step="0.1" min="0.5" max="10" value="{{ word_pause }}">
+                    </div>
+                </div>
+                <button id="update-timing">Update Timing</button>
+            </div>
+            
+            <div class="panel-section">
+                <h2>Decoded Text</h2>
+                <div id="decoded-text">{{ decoded_text }}</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update the decoded text every second
+            setInterval(updateDecodedText, 1000);
+            
+            // Check camera status
+            checkCameraStatus();
+
+            // Add event listeners
+            var startButton = document.getElementById('start-process');
+            var stopButton = document.getElementById('stop-process');
+            var refButton = document.getElementById('show-references');
+            var resetButton = document.getElementById('reset-text');
+            var updateButton = document.getElementById('update-timing');
+            var predictedWord = document.getElementById('predicted-word');
+
+            if (startButton) startButton.addEventListener('click', startCamera);
+            if (stopButton) stopButton.addEventListener('click', stopCamera);
+            if (refButton) refButton.addEventListener('click', showMorseReferences);
+            if (resetButton) resetButton.addEventListener('click', resetDecodedText);
+            if (updateButton) updateButton.addEventListener('click', updateTiming);
+            if (predictedWord) predictedWord.addEventListener('click', handlePredictedWordClick);
+        });
+
+        function updateDecodedText() {
+            var decodedTextElement = document.getElementById('decoded-text');
+            if (!decodedTextElement) {
+                console.error('Decoded text element not found');
+                return;
+            }
+            
+            fetch('/get_decoded_text')
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.text();
+                })
+                .then(function(text) {
+                    decodedTextElement.textContent = text;
+                    updateSuggestions(text);
+                    updatePredictedWord(text);
+                })
+                .catch(function(error) {
+                    console.error('Error updating decoded text:', error);
+                });
+        }
+
+        function checkCameraStatus() {
+            fetch('/camera_status')
+                .then(function(response) {
+                    return response.json();
+                })
+                .then(function(data) {
+                    var statusElement = document.getElementById('status-indicator');
+                    if (statusElement) {
+                        statusElement.textContent = data.active ? 'ACTIVE' : 'INACTIVE';
+                        statusElement.className = data.active ? 
+                            'status-indicator status-active' : 
+                            'status-indicator status-inactive';
+                        
+                        var startButton = document.getElementById('start-process');
+                        var stopButton = document.getElementById('stop-process');
+                        if (startButton) startButton.disabled = data.active;
+                        if (stopButton) stopButton.disabled = !data.active;
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Error checking camera status:', error);
+                });
+                
+            setTimeout(checkCameraStatus, 5000);
+        }
+
+        function resetDecodedText() {
+            if (confirm('Are you sure you want to clear the decoded text?')) {
+                fetch('/reset_text', { method: 'POST' })
+                    .then(function(response) {
+                        return response.json();
+                    })
+                    .then(function(data) {
+                        if (data.success) {
+                            updateDecodedText();
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('Error resetting text:', error);
+                    });
+            }
+        }
+
+        function updatePredictedWord(text) {
+            var predictedWordElement = document.getElementById('predicted-word');
+            if (!predictedWordElement) return;
+
+            if (!text || text.trim() === '') {
+                predictedWordElement.textContent = '';
+                predictedWordElement.className = 'predicted-word';
+                return;
+            }
+
+            var words = text.trim().split(' ');
+            var lastWord = words[words.length - 1];
+            
+            if (text.endsWith(' ')) {
+                predictedWordElement.textContent = '';
+                predictedWordElement.className = 'predicted-word';
+                return;
+            }
+
+            fetch('/predict_word', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({partial_word: lastWord})
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.predicted_word) {
+                    predictedWordElement.textContent = data.predicted_word;
+                    predictedWordElement.className = 'predicted-word highlight';
+                } else {
+                    predictedWordElement.textContent = 'No prediction available';
+                    predictedWordElement.className = 'predicted-word';
+                }
+            })
+            .catch(function(error) {
+                console.error('Error predicting word:', error);
+            });
+        }
+
+        function updateSuggestions(text) {
+            var suggestionsContainer = document.getElementById('suggestions-list');
+            if (!suggestionsContainer) return;
+
+            fetch('/get_suggestions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({text: text})
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                suggestionsContainer.innerHTML = '';
+                if (data.suggestions && data.suggestions.length > 0) {
+                    data.suggestions.forEach(function(suggestion) {
+                        var elem = document.createElement('div');
+                        elem.className = 'suggestion';
+                        elem.textContent = suggestion;
+                        elem.addEventListener('click', function() {
+                            var decodedText = document.getElementById('decoded-text');
+                            if (decodedText) {
+                                var currentText = decodedText.textContent || '';
+                                var words = currentText.split(' ');
+                                words.pop();
+                                words.push(suggestion);
+                                decodedText.textContent = words.join(' ') + ' ';
+                                updateSuggestions(decodedText.textContent);
+                            }
+                        });
+                        suggestionsContainer.appendChild(elem);
+                    });
+                }
+            })
+            .catch(function(error) {
+                console.error('Error getting suggestions:', error);
+            });
+        }
+
+        function handlePredictedWordClick() {
+            var predictedWord = this.textContent;
+            var decodedTextElement = document.getElementById('decoded-text');
+            
+            if (!predictedWord || !decodedTextElement || predictedWord === 'No prediction available') {
+                return;
+            }
+
+            var currentText = decodedTextElement.textContent || '';
+            var words = currentText.trim().split(' ');
+            words.pop();
+            words.push(predictedWord);
+            
+            var newText = words.join(' ') + ' ';
+            decodedTextElement.textContent = newText;
+            this.textContent = '';
+            this.className = 'predicted-word';
+            
+            fetch('/update_decoded_text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({text: newText})
+            });
+        }
+
+        function startCamera() {
+            fetch('/start_camera', {
+                method: 'POST'
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success) {
+                    checkCameraStatus();
+                }
+            });
+        }
+
+        function stopCamera() {
+            fetch('/stop_camera', {
+                method: 'POST'
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success) {
+                    checkCameraStatus();
+                }
+            });
+        }
+
+        function showMorseReferences() {
+            var refWindow = window.open('', 'MorseCodeReference', 'width=600,height=800');
+            if (refWindow) {
+                refWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>Morse Code Reference</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            h1 { color: #333; }
+                            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+                            th { background-color: #f2f2f2; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Morse Code Reference</h1>
+                        <table>
+                            <tr><th>Character</th><th>Morse Code</th></tr>
+                            <tr><td>A</td><td>.-</td></tr>
+                            <tr><td>B</td><td>-...</td></tr>
+                            <tr><td>C</td><td>-.-.</td></tr>
+                            <!-- Add more rows as needed -->
+                        </table>
+                    </body>
+                    </html>
+                `);
+            }
+        }
+
+        function updateTiming() {
+            var timingData = {
+                dot_max: parseFloat(document.getElementById('dot_max').value) || 1,
+                dash_min: parseFloat(document.getElementById('dash_min').value) || 2,
+                dash_max: parseFloat(document.getElementById('dash_max').value) || 3,
+                char_pause: parseFloat(document.getElementById('char_pause').value) || 3,
+                word_pause: parseFloat(document.getElementById('word_pause').value) || 4
+            };
+
+            fetch('/update_timing', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(timingData)
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success) {
+                    alert('Timing parameters updated successfully!');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
